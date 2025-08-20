@@ -1,0 +1,38 @@
+stages:
+  - build
+  - deploy
+
+build_backend:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  script:
+  - dotnet restore src/Backend/DispoFinder.sln
+  - dotnet build src/Backend/DispoFinder.sln --configuration Release
+  - dotnet publish src/Backend/DispoFinder.sln -c Release -o published
+  artifacts:
+    paths:
+      - published/
+
+deploy_backend:
+  stage: deploy
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  script:
+    - cd src/Backend
+    - echo "$AZURE_WEBAPP_PUBLISH_PROFILE" > publishProfile.xml
+    - dotnet restore DispoFinder.Host/DispoFinder.Host.csproj
+    - dotnet publish DispoFinder.Host/DispoFinder.Host.csproj -c Release -o publish
+    - apt-get update && apt-get install -y zip
+    - cd publish && zip -r ../app.zip . && cd ..
+    - |
+      RAW_URL=$(grep -oP 'publishUrl="\K[^\"]+' publishProfile.xml | head -1)
+      if echo "$RAW_URL" | grep -qi 'zipdeploy'; then
+        DEPLOY_URL="$RAW_URL"
+      else
+        HOST=$(echo "$RAW_URL" | sed -E 's#^https?://##; s#/.*$##; s#:.*$##')
+        DEPLOY_URL="https://$HOST/api/zipdeploy"
+      fi
+      USER=$(grep -oP 'userName="\K[^\"]+' publishProfile.xml | head -1)
+      PASS=$(grep -oP 'userPWD="\K[^\"]+' publishProfile.xml | head -1)
+      curl -sS -X POST -u "$USER:$PASS" "$DEPLOY_URL" --data-binary @app.zip -H "Content-Type: application/zip"
+  only:
+    - main

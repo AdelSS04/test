@@ -1,0 +1,3 @@
+include:
+  - local: 'src/Backend/.gitlab-ci.yml'
+  - local: 'src/DispoFinder.Portail/.gitlab-ci.yml'
